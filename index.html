@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Markets Dashboard</title>
+
+  <!-- Tailwind CDN (no build step) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    /* nicer tap targets & iOS safe-area for bottom tabs */
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <!-- App shell: content + bottom tabs -->
+  <div class="min-h-screen flex flex-col">
+    <!-- Content -->
+    <main class="flex-1">
+      <div class="max-w-6xl mx-auto px-4 pt-5 pb-24">
+        <!-- Top header -->
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 class="text-xl font-semibold">Markets Dashboard</h1>
+            <div class="mt-1 text-xs text-slate-400 leading-relaxed">
+              <div id="subtitleLine" class="flex flex-wrap gap-2 items-center">
+                <span class="text-slate-400">Tab:</span>
+                <span id="activeTabLabel" class="px-2 py-0.5 rounded-full border border-slate-700 bg-slate-900/40">
+                  Stocks
+                </span>
+              </div>
+              <div class="mt-1">
+                Updated: <span id="updatedAt" class="text-slate-300">—</span>
+              </div>
+              <div class="mt-1">
+                Stocks as of: <span id="asOf" class="text-slate-300">—</span>
+
+              </div>
+            </div>
+          </div>
+
+          <!-- Controls -->
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end w-full sm:w-auto">
+            <!-- Stocks-only search -->
+            <input id="search" type="search"
+              class="w-full sm:w-72 px-3 py-2 rounded-xl bg-slate-900/60 border border-slate-700 outline-none focus:ring-2 focus:ring-slate-500"
+              placeholder="Search symbol or name…" />
+
+            <select id="refresh"
+              class="w-full sm:w-auto px-3 py-2 rounded-xl bg-slate-900/60 border border-slate-700">
+              <option value="0">No auto-refresh</option>
+              <option value="15000">Refresh 15s</option>
+              <option value="30000" selected>Refresh 30s</option>
+              <option value="60000">Refresh 60s</option>
+            </select>
+
+            <button id="reloadBtn"
+              class="w-full sm:w-auto px-4 py-2 rounded-xl bg-slate-100 text-slate-900 font-medium hover:bg-white active:scale-[0.99]">
+              Reload
+            </button>
+          </div>
+        </div>
+
+        <!-- Status -->
+        <div id="status"
+          class="mt-4 px-4 py-3 rounded-2xl border border-slate-800 bg-slate-900/40 text-sm text-slate-300">
+          Loading…
+        </div>
+
+        <!-- ===================== STOCKS VIEW ===================== -->
+        <section id="viewStocks" class="mt-4">
+          <!-- Mobile cards -->
+          <div id="stockCards" class="grid grid-cols-1 gap-3 sm:hidden"></div>
+
+          <!-- Desktop table -->
+          <div class="hidden sm:block overflow-x-auto rounded-2xl border border-slate-800 bg-slate-900/40">
+            <table class="min-w-full text-sm">
+              <thead class="bg-slate-900/60">
+                <tr class="text-xs uppercase tracking-wide text-slate-400">
+                  <th class="px-4 py-3 text-left cursor-pointer select-none" data-stock-key="symbol">Symbol</th>
+                  <th class="px-4 py-3 text-left cursor-pointer select-none" data-stock-key="name">Name</th>
+                  <th class="px-4 py-3 text-right cursor-pointer select-none" data-stock-key="price">Price (PHP)</th>
+                  <th class="px-4 py-3 text-right cursor-pointer select-none" data-stock-key="percentChange">% Change</th>
+                  <th class="px-4 py-3 text-right cursor-pointer select-none" data-stock-key="volume">Volume</th>
+                </tr>
+              </thead>
+              <tbody id="stockTbody" class="divide-y divide-slate-800"></tbody>
+            </table>
+          </div>
+
+          <div class="mt-4 text-xs text-slate-500">
+            Tip: click a column header (desktop) to sort. Search works on Stocks only.
+          </div>
+
+          <details class="mt-5 text-sm text-slate-300">
+            <summary class="cursor-pointer select-none text-slate-200">If Stocks fetch fails (CORS), run via local server</summary>
+            <div class="mt-2 text-slate-400 text-xs leading-relaxed">
+              Python: <code class="px-1 py-0.5 rounded bg-slate-900 border border-slate-800">python -m http.server 8000</code>
+              then open <code class="px-1 py-0.5 rounded bg-slate-900 border border-slate-800">http://localhost:8000</code>.
+            </div>
+          </details>
+        </section>
+
+        <!-- ===================== METALS VIEW ===================== -->
+        <section id="viewMetals" class="mt-4 hidden">
+          <!-- Key metals highlight -->
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+              <div class="text-xs text-slate-400">Gold</div>
+              <div id="m_gold" class="mt-1 text-lg font-semibold tabular-nums">—</div>
+              <div class="mt-1 text-xs text-slate-500">PHP / g</div>
+            </div>
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+              <div class="text-xs text-slate-400">Silver</div>
+              <div id="m_silver" class="mt-1 text-lg font-semibold tabular-nums">—</div>
+              <div class="mt-1 text-xs text-slate-500">PHP / g</div>
+            </div>
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+              <div class="text-xs text-slate-400">Platinum</div>
+              <div id="m_platinum" class="mt-1 text-lg font-semibold tabular-nums">—</div>
+              <div class="mt-1 text-xs text-slate-500">PHP / g</div>
+            </div>
+            <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+              <div class="text-xs text-slate-400">Palladium</div>
+              <div id="m_palladium" class="mt-1 text-lg font-semibold tabular-nums">—</div>
+              <div class="mt-1 text-xs text-slate-500">PHP / g</div>
+            </div>
+          </div>
+
+          <!-- All metals list -->
+          <div class="mt-4 rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <div class="text-sm font-medium">Metals & Benchmarks</div>
+                <div class="text-xs text-slate-400">
+                  Currency: <span id="metalsCurrency" class="text-slate-300">—</span> ·
+                  Unit: <span id="metalsUnit" class="text-slate-300">—</span> ·
+                  Metal timestamp: <span id="metalsTs" class="text-slate-300">—</span>
+                </div>
+              </div>
+
+              <!-- optional filter -->
+              <input id="metalsFilter" type="search"
+                class="w-full sm:w-72 px-3 py-2 rounded-xl bg-slate-950/40 border border-slate-800 outline-none focus:ring-2 focus:ring-slate-600"
+                placeholder="Filter metals (e.g. lbma, copper)…" />
+            </div>
+
+            <div id="metalsGrid" class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+
+            <div class="mt-4 text-xs text-slate-500">
+              Values are from metals.dev “latest” endpoint.
+            </div>
+          </div>
+
+          <details class="mt-5 text-sm text-slate-300">
+            <summary class="cursor-pointer select-none text-slate-200">Security note: don’t expose API keys in frontend</summary>
+            <div class="mt-2 text-slate-400 text-xs leading-relaxed">
+              Anyone can view this key in page source. For production, call metals.dev from your backend and return only the data you need.
+            </div>
+          </details>
+        </section>
+      </div>
+    </main>
+
+    <!-- Bottom Tabs -->
+    <nav class="safe-bottom sticky bottom-0 border-t border-slate-800 bg-slate-950/80 backdrop-blur">
+      <div class="max-w-6xl mx-auto px-4">
+        <div class="grid grid-cols-2 gap-2 py-3">
+          <button id="tabStocks"
+            class="flex items-center justify-center gap-2 px-3 py-2 rounded-2xl border border-slate-800 bg-slate-900/40 hover:bg-slate-900/70">
+            <span class="text-sm font-medium">Stocks</span>
+          </button>
+
+          <button id="tabMetals"
+            class="flex items-center justify-center gap-2 px-3 py-2 rounded-2xl border border-slate-800 bg-slate-950/20 hover:bg-slate-900/40">
+            <span class="text-sm font-medium">Gold & Metals</span>
+          </button>
+        </div>
+      </div>
+    </nav>
+  </div>
+
+<script>
+(() => {
+  // ===================== CONFIG =====================
+  const STOCKS_URL = "https://phisix-api3.appspot.com/stocks.json";
+
+  // ⚠️ Key exposed in frontend. Consider proxying in production.
+  const METALS_URL = "https://api.metals.dev/v1/latest?api_key=LGRU6UKJS6UXRVDHXPXI602DHXPXI&currency=PHP&unit=g";
+  // If the browser blocks cross-origin fetch (CORS), we fall back to a public CORS proxy.
+  // For production, use your own backend proxy instead of a public proxy.
+  const CORS_PROXY = "https://api.allorigins.win/raw?url=";
+
+
+  // ===================== ELEMENTS =====================
+  const elActiveTabLabel = document.getElementById("activeTabLabel");
+  const elUpdatedAt = document.getElementById("updatedAt");
+  const elStatus = document.getElementById("status");
+  const elSearch = document.getElementById("search");
+  const elRefresh = document.getElementById("refresh");
+  const elReload = document.getElementById("reloadBtn");
+
+  const viewStocks = document.getElementById("viewStocks");
+  const viewMetals = document.getElementById("viewMetals");
+  const tabStocks = document.getElementById("tabStocks");
+  const tabMetals = document.getElementById("tabMetals");
+
+  // Stocks UI
+  const elStockTbody = document.getElementById("stockTbody");
+  const elStockCards = document.getElementById("stockCards");
+  const elStocksAsOf = document.getElementById("asOf"); // from header
+
+  // Metals UI
+  const elMG = document.getElementById("m_gold");
+  const elMS = document.getElementById("m_silver");
+  const elMPt = document.getElementById("m_platinum");
+  const elMPd = document.getElementById("m_palladium");
+  const elMetalsCurrency = document.getElementById("metalsCurrency");
+  const elMetalsUnit = document.getElementById("metalsUnit");
+  const elMetalsTs = document.getElementById("metalsTs");
+  const elMetalsGrid = document.getElementById("metalsGrid");
+  const elMetalsFilter = document.getElementById("metalsFilter");
+
+  // ===================== STATE =====================
+  let activeTab = "stocks"; // "stocks" | "metals"
+  let refreshTimer = null;
+
+  // Stocks state
+  let allStocks = [];
+  let stockSortKey = "symbol";
+  let stockSortDir = "asc";
+
+  // Metals state
+  let metalsData = null;
+
+  // ===================== HELPERS =====================
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function fmtNumber(n) {
+    const num = Number(n);
+    if (!Number.isFinite(num)) return "—";
+    return num.toLocaleString("en-PH");
+  }
+
+  function fmtMoney(n) {
+    const num = Number(n);
+    if (!Number.isFinite(num)) return "—";
+    return num.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  }
+
+  function setStatusOk(text) {
+    elStatus.textContent = text;
+    elStatus.classList.remove("text-rose-300", "border-rose-800", "bg-rose-950/30");
+    elStatus.classList.add("text-slate-300", "border-slate-800", "bg-slate-900/40");
+  }
+
+  function setStatusError(text) {
+    elStatus.textContent = text;
+    elStatus.classList.remove("text-slate-300", "border-slate-800", "bg-slate-900/40");
+    elStatus.classList.add("text-rose-300", "border-rose-800", "bg-rose-950/30");
+  }
+
+  function setActiveTab(tab) {
+    activeTab = tab;
+
+    // views
+    viewStocks.classList.toggle("hidden", tab !== "stocks");
+    viewMetals.classList.toggle("hidden", tab !== "metals");
+
+    // header label
+    elActiveTabLabel.textContent = tab === "stocks" ? "Stocks" : "Gold & Metals";
+
+    // controls visibility
+    elSearch.classList.toggle("hidden", tab !== "stocks");
+    elSearch.value = tab === "stocks" ? elSearch.value : "";
+
+    // tab button styling
+    if (tab === "stocks") {
+      tabStocks.className = "flex items-center justify-center gap-2 px-3 py-2 rounded-2xl border border-slate-800 bg-slate-900/60";
+      tabMetals.className = "flex items-center justify-center gap-2 px-3 py-2 rounded-2xl border border-slate-800 bg-slate-950/20 hover:bg-slate-900/40";
+    } else {
+      tabStocks.className = "flex items-center justify-center gap-2 px-3 py-2 rounded-2xl border border-slate-800 bg-slate-950/20 hover:bg-slate-900/40";
+      tabMetals.className = "flex items-center justify-center gap-2 px-3 py-2 rounded-2xl border border-slate-800 bg-slate-900/60";
+    }
+
+    // refresh applies to active tab
+    setAutoRefresh(elRefresh.value);
+
+    // render status + content
+    if (tab === "stocks") renderStocks();
+    else renderMetals();
+  }
+
+  function setAutoRefresh(ms) {
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = null;
+
+    const n = Number(ms);
+    if (Number.isFinite(n) && n > 0) {
+      refreshTimer = setInterval(() => {
+        if (activeTab === "stocks") loadStocks();
+        else loadMetals();
+      }, n);
+    }
+  }
+
+  // ===================== STOCKS =====================
+  function safePercent(stock) {
+    const v = (stock.percentChange ?? stock.percent_change);
+    const num = Number(v);
+    return Number.isFinite(num) ? num : 0;
+  }
+
+  function safePrice(stock) {
+    const amt = stock?.price?.amount ?? stock?.price;
+    const num = Number(amt);
+    return Number.isFinite(num) ? num : NaN;
+  }
+
+  function getStocksSortedFiltered() {
+    const q = (elSearch.value || "").trim().toLowerCase();
+    let rows = allStocks;
+
+    if (q) {
+      rows = rows.filter(s =>
+        String(s.symbol || "").toLowerCase().includes(q) ||
+        String(s.name || "").toLowerCase().includes(q)
+      );
+    }
+
+    const dirMul = stockSortDir === "asc" ? 1 : -1;
+
+    return [...rows].sort((a, b) => {
+      let av, bv;
+
+      if (stockSortKey === "price") { av = safePrice(a); bv = safePrice(b); }
+      else if (stockSortKey === "percentChange") { av = safePercent(a); bv = safePercent(b); }
+      else if (stockSortKey === "volume") { av = Number(a.volume ?? 0); bv = Number(b.volume ?? 0); }
+      else if (stockSortKey === "name") { av = String(a.name ?? ""); bv = String(b.name ?? ""); }
+      else { av = String(a.symbol ?? ""); bv = String(b.symbol ?? ""); }
+
+      const aNaN = typeof av === "number" && Number.isNaN(av);
+      const bNaN = typeof bv === "number" && Number.isNaN(bv);
+      if (aNaN && !bNaN) return 1;
+      if (!aNaN && bNaN) return -1;
+
+      if (av < bv) return -1 * dirMul;
+      if (av > bv) return  1 * dirMul;
+      return 0;
+    });
+  }
+
+  function pctBadgeClass(pct) {
+    if (pct > 0) return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+    if (pct < 0) return "bg-rose-500/15 text-rose-300 border-rose-500/30";
+    return "bg-slate-500/10 text-slate-300 border-slate-700";
+  }
+
+  function renderStocks() {
+    const rows = getStocksSortedFiltered();
+    elUpdatedAt.textContent = new Date().toLocaleString("en-PH");
+
+    setStatusOk(`Stocks: Showing ${rows.length.toLocaleString("en-PH")} of ${allStocks.length.toLocaleString("en-PH")}`);
+
+    // Desktop table
+    elStockTbody.innerHTML = rows.map(s => {
+      const symbol = s.symbol ?? "—";
+      const name = s.name ?? "—";
+      const price = safePrice(s);
+      const pct = safePercent(s);
+      const vol = Number(s.volume ?? 0);
+      const pctSign = pct > 0 ? "+" : "";
+      const pctClass = pct > 0 ? "text-emerald-300" : (pct < 0 ? "text-rose-300" : "text-slate-300");
+
+      return `
+        <tr class="hover:bg-slate-900/40">
+          <td class="px-4 py-3">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full border border-slate-700 bg-slate-950">
+              ${escapeHtml(symbol)}
+            </span>
+          </td>
+          <td class="px-4 py-3">${escapeHtml(name)}</td>
+          <td class="px-4 py-3 text-right tabular-nums">${Number.isFinite(price) ? fmtMoney(price) : "—"}</td>
+          <td class="px-4 py-3 text-right tabular-nums ${pctClass}">${escapeHtml(`${pctSign}${pct.toFixed(2)}%`)}</td>
+          <td class="px-4 py-3 text-right tabular-nums">${fmtNumber(vol)}</td>
+        </tr>
+      `;
+    }).join("");
+
+    // Mobile cards
+    elStockCards.innerHTML = rows.map(s => {
+      const symbol = s.symbol ?? "—";
+      const name = s.name ?? "—";
+      const price = safePrice(s);
+      const pct = safePercent(s);
+      const vol = Number(s.volume ?? 0);
+      const pctSign = pct > 0 ? "+" : "";
+
+      return `
+        <div class="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full border border-slate-700 bg-slate-950 text-sm">
+                  ${escapeHtml(symbol)}
+                </span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full border ${pctBadgeClass(pct)} text-xs">
+                  ${escapeHtml(`${pctSign}${pct.toFixed(2)}%`)}
+                </span>
+              </div>
+              <div class="mt-2 text-sm text-slate-200 line-clamp-2">${escapeHtml(name)}</div>
+            </div>
+
+            <div class="text-right shrink-0">
+              <div class="text-xs text-slate-400">Price</div>
+              <div class="text-base font-semibold tabular-nums">${Number.isFinite(price) ? fmtMoney(price) : "—"}</div>
+            </div>
+          </div>
+
+          <div class="mt-3 grid grid-cols-2 gap-3">
+            <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+              <div class="text-xs text-slate-400">Volume</div>
+              <div class="mt-1 font-medium tabular-nums">${fmtNumber(vol)}</div>
+            </div>
+            <div class="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+              <div class="text-xs text-slate-400">Currency</div>
+              <div class="mt-1 font-medium">${escapeHtml(s?.price?.currency ?? "PHP")}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  async function loadStocks() {
+    setStatusOk("Fetching Stocks…");
+    try {
+      const res = await fetch(STOCKS_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      allStocks = Array.isArray(data.stocks) ? data.stocks : [];
+      if (elStocksAsOf) elStocksAsOf.textContent = data.as_of ? new Date(data.as_of).toLocaleString("en-PH") : "—";
+
+      if (activeTab === "stocks") renderStocks();
+    } catch (err) {
+      console.error(err);
+      if (activeTab === "stocks") {
+        setStatusError("Stocks fetch failed (possible CORS). Try running via a local server.");
+        elStockTbody.innerHTML = "";
+        elStockCards.innerHTML = "";
+        if (elStocksAsOf) elStocksAsOf.textContent = "—";
+      }
+      allStocks = [];
+    }
+  }
+
+  // ===================== METALS =====================
+  function renderMetals() {
+    elUpdatedAt.textContent = new Date().toLocaleString("en-PH");
+
+    if (!metalsData || metalsData.status !== "success") {
+      setStatusOk("Metals: No data yet. Click Reload.");
+      elMetalsGrid.innerHTML = "";
+      return;
+    }
+
+    const { currency, unit, metals, timestamps } = metalsData;
+
+    setStatusOk("Metals: Loaded successfully");
+    elMetalsCurrency.textContent = currency || "—";
+    elMetalsUnit.textContent = unit || "—";
+    elMetalsTs.textContent = timestamps?.metal ? new Date(timestamps.metal).toLocaleString("en-PH") : "—";
+
+    // Key metals
+    elMG.textContent = metals?.gold != null ? fmtMoney(metals.gold) : "—";
+    elMS.textContent = metals?.silver != null ? fmtMoney(metals.silver) : "—";
+    elMPt.textContent = metals?.platinum != null ? fmtMoney(metals.platinum) : "—";
+    elMPd.textContent = metals?.palladium != null ? fmtMoney(metals.palladium) : "—";
+
+    // Filtered grid
+    const q = (elMetalsFilter.value || "").trim().toLowerCase();
+    const entries = Object.entries(metals || {})
+      .filter(([k]) => !q || k.toLowerCase().includes(q))
+      .sort((a, b) => a[0].localeCompare(b[0]));
+
+    elMetalsGrid.innerHTML = entries.map(([k, v]) => `
+      <div class="rounded-2xl border border-slate-800 bg-slate-950/30 p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-sm font-medium">${escapeHtml(k)}</div>
+          <div class="text-xs text-slate-500">${escapeHtml(currency)} / ${escapeHtml(unit)}</div>
+        </div>
+        <div class="mt-2 text-lg font-semibold tabular-nums">${fmtMoney(v)}</div>
+      </div>
+    `).join("");
+  }
+
+  async function loadMetals() {
+    setStatusOk("Fetching Metals…");
+    try {
+      let res;
+      try {
+        // Attempt direct fetch first
+        res = await fetch(METALS_URL, { cache: "no-store" });
+      } catch (e) {
+        // Network/CORS failure before we even get a response
+        res = null;
+      }
+      if (!res || !res.ok) {
+        // Fallback via public CORS proxy (dev-only convenience)
+        const proxied = CORS_PROXY + encodeURIComponent(METALS_URL);
+        res = await fetch(proxied, { cache: "no-store" });
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      metalsData = data;
+
+      // No "as_of" from this API; show metal timestamp in header "Updated"
+      if (elStocksAsOf) elStocksAsOf.textContent = (activeTab === "stocks") ? elStocksAsOf.textContent : "—";
+
+      if (activeTab === "metals") renderMetals();
+    } catch (err) {
+      console.error(err);
+      metalsData = null;
+      if (activeTab === "metals") {
+        setStatusError("Metals fetch failed. Likely CORS. Tip: serve via a local server or use a backend proxy.");
+        elMetalsGrid.innerHTML = "";
+        elMG.textContent = elMS.textContent = elMPt.textContent = elMPd.textContent = "—";
+        elMetalsCurrency.textContent = elMetalsUnit.textContent = elMetalsTs.textContent = "—";
+      }
+    }
+  }
+
+  // ===================== EVENTS =====================
+  // Desktop sort headers (stocks)
+  document.querySelectorAll("th[data-stock-key]").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.getAttribute("data-stock-key");
+      if (stockSortKey === key) stockSortDir = (stockSortDir === "asc") ? "desc" : "asc";
+      else { stockSortKey = key; stockSortDir = "asc"; }
+      if (activeTab === "stocks") renderStocks();
+    });
+  });
+
+  elSearch.addEventListener("input", () => {
+    if (activeTab === "stocks") renderStocks();
+  });
+
+  elMetalsFilter.addEventListener("input", () => {
+    if (activeTab === "metals") renderMetals();
+  });
+
+  elRefresh.addEventListener("change", () => setAutoRefresh(elRefresh.value));
+
+  elReload.addEventListener("click", () => {
+    if (activeTab === "stocks") loadStocks();
+    else loadMetals();
+  });
+
+  tabStocks.addEventListener("click", () => setActiveTab("stocks"));
+  tabMetals.addEventListener("click", () => setActiveTab("metals"));
+
+  // ===================== INIT =====================
+  setAutoRefresh(elRefresh.value);
+  setActiveTab("stocks");
+
+  // Load both once so switching tabs feels instant
+  loadStocks();
+  loadMetals();
+})();
+</script>
+</body>
+</html>
